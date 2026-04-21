@@ -1,6 +1,7 @@
 apiVersion: automation.cloudbees.io/v1alpha1
 kind: workflow
 name: deploy
+
 on:
   workflow_call:
     inputs:
@@ -10,24 +11,43 @@ on:
       artifact-url:
         type: string
         required: true
+      artifact-type:
+        type: string
+        required: false
+        default: "container"
       environment:
         type: string
         required: true
+      jira-project:
+        type: string
+        required: false
+        default: ""
+      fix-version:
+        type: string
+        required: false
+        default: ""
+      gitops-repo:
+        type: string
+        required: false
+        default: ""
 
 jobs:
   deploy:
     environment: ${{ inputs.environment }}
+
     steps:
       - name: Checkout
         uses: cloudbees-io/checkout@v1
         with:
           repository: cb-unify-enterprise-poc/adp-web
-      - uses: cloudbees-days/setup-kubeconfig
-        name: Set kubeconfig
+
+      - name: Set kubeconfig
+        uses: cloudbees-days/setup-kubeconfig
         with:
           kubeconfig: ${{ secrets.KUBECONFIG }}
-      - id: install-chart
-        name: Install helm chart
+
+      - name: Install helm chart
+        id: install-chart
         uses: cloudbees-io/helm-install@v1
         with:
           chart-location: ${{ cloudbees.workspace }}/chart
@@ -37,23 +57,36 @@ jobs:
             image:
               url: ${{ inputs.artifact-url }}
             hostname: adp-web.${{ inputs.environment }}.preview.cb-demos.io
-            config:
-              fmKey: ${{ vars.FM_TOKEN }}
-              apiUrl: https://adp-api.${{ inputs.environment }}.preview.cb-demos.io/api
-              authUrl: https://adp-auth.${{ inputs.environment }}.preview.cb-demos.io
-              useVPC: false
-              fmInstance: cloudbees.io
+
       - name: Register deployed artifact
         uses: cloudbees-io/register-deployed-artifact@v2
         with:
           artifact-id: ${{ inputs.artifact-id }}
           target-environment: ${{ inputs.environment }}
+
       - name: Publish evidence
         uses: cloudbees-io/publish-evidence-item@v1
         with:
           content: |-
-            ## Deployed environment
-            [Dev frontend](https://adp-web.${{ inputs.environment }}.preview.cb-demos.io/)
+            # Deployment Evidence
 
-            Running ${{ inputs.artifact-url }}
+            **Jira Project:** `${{ inputs.jira-project }}`
+            **Fix Version:** `${{ inputs.fix-version }}`
+            **Environment:** `${{ inputs.environment }}`
+            **GitOps Repo:** `${{ inputs.gitops-repo }}`
+            **Artifact Type:** `${{ inputs.artifact-type }}`
+
+            ## Artifact Details
+            - Artifact ID: `${{ inputs.artifact-id }}`
+            - Artifact URL: `${{ inputs.artifact-url }}`
+
+            ## Deployment Endpoint
+            [Open service](https://adp-web.${{ inputs.environment }}.preview.cb-demos.io/)
+
+            ## Outcome
+            Deployment completed successfully.
+
+            ---
+            **Traceability**
+            - Workflow Run ID: ${{ cloudbees.run_id }}
           format: MARKDOWN
