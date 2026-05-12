@@ -51,7 +51,7 @@ jobs:
           apk add --no-cache sed
 
           echo "Cloning GitOps repository..."
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ inputs.gitops-repo }}.git gitops-manifest
+          git clone https://x-access-token:${{ secrets.GITOPS_TOKEN }}@github.com/${{ inputs.gitops-repo }}.git gitops-manifest
 
           cd gitops-manifest
 
