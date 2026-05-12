@@ -29,7 +29,7 @@ on:
       gitops-repo:
         type: string
         required: false
-        default: ""
+        default: "cb-unify-enterprise-poc/gitops-manifest"
 
 jobs:
   deploy:
@@ -41,22 +41,34 @@ jobs:
         with:
           repository: cb-unify-enterprise-poc/adp-web
 
-      - name: Set kubeconfig
-        uses: cloudbees-days/setup-kubeconfig
-        with:
-          kubeconfig: ${{ secrets.KUBECONFIG }}
+      - name: Update GitOps manifest
+        id: update-gitops-manifest
+        uses: docker://alpine/git:latest
+        shell: sh
+        run: |
+          set -e
 
-      - name: Install helm chart
-        id: install-chart
-        uses: cloudbees-io/helm-install@v1
-        with:
-          chart-location: ${{ cloudbees.workspace }}/chart
-          release-name: adp-web
-          namespace: ${{ vars.namespace }}
-          values: |
-            image:
-              url: ${{ inputs.artifact-url }}
-            hostname: adp-web.${{ inputs.environment }}.preview.cb-demos.io
+          apk add --no-cache sed
+
+          echo "Cloning GitOps repository..."
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ inputs.gitops-repo }}.git gitops-manifest
+
+          cd gitops-manifest
+
+          VALUES_FILE="environments/${{ inputs.environment }}/values.yaml"
+
+          echo "Updating $VALUES_FILE for adp-web"
+          echo "Artifact URL: ${{ inputs.artifact-url }}"
+
+          sed -i "/adpWeb:/,/adpAuth:/ s|url: .*|url: ${{ inputs.artifact-url }}|" "$VALUES_FILE"
+          sed -i "/adpWeb:/,/adpAuth:/ s|hostname: .*|hostname: adp-web.${{ inputs.environment }}.preview.cb-demos.io|" "$VALUES_FILE"
+
+          git config user.email "cloudbees-demo@cloudbees.com"
+          git config user.name "cloudbees-demo"
+
+          git add "$VALUES_FILE"
+          git commit -m "Promote adp-web to ${{ inputs.environment }}" || echo "No changes to commit"
+          git push
 
       - name: Register deployed artifact
         uses: cloudbees-io/register-deployed-artifact@v2
@@ -80,11 +92,16 @@ jobs:
             - Artifact ID: `${{ inputs.artifact-id }}`
             - Artifact URL: `${{ inputs.artifact-url }}`
 
+            ## GitOps Details
+            - Updated file: `environments/${{ inputs.environment }}/values.yaml`
+            - Updated component: `adp-web`
+            - Argo CD application: `${{ inputs.environment }}`
+
             ## Deployment Endpoint
             [Open service](https://adp-web.${{ inputs.environment }}.preview.cb-demos.io/)
 
             ## Outcome
-            Deployment completed successfully.
+            GitOps manifest updated successfully. Argo CD will reconcile the target environment.
 
             ---
             **Traceability**
